@@ -3,9 +3,9 @@ import { ObjectId } from 'mongodb';
 import * as taskService from '../services/task.service';
 import * as userService from '../services/user.service';
 import * as boardService from '../services/board.service';
+import * as columnService from '../services/column.service';
 import { checkBody, createError } from '../services/error.service';
 import { socket } from '../services/server.service';
-
 
 export const updateSetOfTask = async (req: Request, res: Response) => {
   const guid = req.header('Guid') || 'undefined';
@@ -16,9 +16,9 @@ export const updateSetOfTask = async (req: Request, res: Response) => {
   }
   const updatedTasks = [];
   for (const oneTask of tasks) {
-    const taskError = checkBody(oneTask, ['_id', 'order', 'columnId'])
+    const taskError = checkBody(oneTask, ['_id', 'order', 'columnId']);
     if (taskError) {
-      return res.status(400).send(createError(400, "bad request: " + taskError));
+      return res.status(400).send(createError(400, 'bad request: ' + taskError));
     }
     const { _id, order, columnId } = oneTask;
 
@@ -26,22 +26,27 @@ export const updateSetOfTask = async (req: Request, res: Response) => {
     if (!foundedTasks) {
       return res.status(404).send(createError(404, 'Task was not founded!'));
     }
-    try {
-      updatedTasks.push(await taskService.updateTask(_id, { order, columnId }, guid, initUser, false));
+    const foundedColumns = await columnService.findColumnById(columnId);
+    if (!foundedColumns) {
+      return res.status(404).send(createError(404, 'Column was not founded!'));
     }
-    catch (err) { return console.log(err); }
-
+    try {
+      updatedTasks.push(
+        await taskService.updateTask(_id, { order, columnId }, guid, initUser, false),
+      );
+    } catch (err) {
+      return console.log(err);
+    }
   }
   socket.emit('tasks', {
     action: 'update',
-    users: await boardService.getUserIdsByBoardsIds(updatedTasks.map(item => item.boardId)),
-    ids: updatedTasks.map(item => item._id),
+    users: await boardService.getUserIdsByBoardsIds(updatedTasks.map((item) => item.boardId)),
+    ids: updatedTasks.map((item) => item._id),
     guid,
     notify: false,
     initUser,
   });
   return res.json(updatedTasks);
-
 };
 
 export const findTasks = async (req: Request, res: Response) => {
@@ -50,36 +55,41 @@ export const findTasks = async (req: Request, res: Response) => {
   const allTasks = await taskService.findTasks({});
   const ids = req.query.ids as string[];
   if (ids) {
-    return res.json(allTasks.filter(item => ids.includes(item._id)));
+    return res.json(allTasks.filter((item) => ids.includes(item._id)));
   } else if (search) {
     try {
       const allUsers = await userService.findUsers();
-      return res.json(allTasks.filter(oneTask => {
-        const searchRequest = search.toUpperCase();
-        if (oneTask.title.toUpperCase().includes(searchRequest)) {
-          return true;
-        }
-        if (oneTask.description.toUpperCase().includes(searchRequest)) {
-          return true;
-        }
-        const users = [...allUsers.filter(user => user._id === new ObjectId(oneTask.userId) || oneTask.users.includes(user._id))];
-        for (const user of users) {
-
-          if (user.name.toUpperCase().includes(searchRequest)) {
+      return res.json(
+        allTasks.filter((oneTask) => {
+          const searchRequest = search.toUpperCase();
+          if (oneTask.title.toUpperCase().includes(searchRequest)) {
             return true;
           }
-        }
-        return false;
-
-      }));
+          if (oneTask.description.toUpperCase().includes(searchRequest)) {
+            return true;
+          }
+          const users = [
+            ...allUsers.filter(
+              (user) =>
+                user._id === new ObjectId(oneTask.userId) || oneTask.users.includes(user._id),
+            ),
+          ];
+          for (const user of users) {
+            if (user.name.toUpperCase().includes(searchRequest)) {
+              return true;
+            }
+          }
+          return false;
+        }),
+      );
+    } catch (err) {
+      return console.log(err);
     }
-    catch (err) { return console.log(err); }
   } else if (boards) {
-    return res.json(allTasks.filter(oneTask => boards.includes(oneTask.boardId)));
+    return res.json(allTasks.filter((oneTask) => boards.includes(oneTask.boardId)));
   } else {
     return res.status(400).send(createError(400, 'Bad request'));
   }
-
 };
 
 export const getTasksByBoard = async (req: Request, res: Response) => {
@@ -91,4 +101,3 @@ export const getTasksByBoard = async (req: Request, res: Response) => {
     console.log(err);
   }
 };
-
