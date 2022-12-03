@@ -15,6 +15,7 @@ export const getBoards = async (_: Request, res: Response) => {
 export const getBoardById = async (req: Request, res: Response) => {
   try {
     const foundedBoards = await boardService.findBoardById(req.params['boardId']);
+    if (!foundedBoards) return res.status(404).send(createError(404, "Board was not founded!"));
     res.json(foundedBoards);
   } catch (err) {
     return res.status(404).send(createError(404, 'Board was not founded!'));
